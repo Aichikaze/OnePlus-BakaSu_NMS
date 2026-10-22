@@ -922,6 +922,20 @@ runs:
           exit 1
         fi
 
+        # Kbuild changed $(src) semantics on 6.12, so KSU_KERNEL_DIR resolves relative to
+        # the symlinked drivers/kernelsu and rules built from it (the preinit runner.elf
+        # prerequisite, the -I paths) point outside the tree. Anchor it on the Kbuild's
+        # own absolute directory instead; identical result on older kernels.
+        if [ -f "$KERNEL_PLATFORM_FOLDER/KernelSU/kernel/Kbuild" ]; then
+          sed -i \
+            -e 's|^KSU_KERNEL_DIR := $(srctree)/$(src)$|KSU_KERNEL_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))|' \
+            -e 's|^KSU_KERNEL_DIR := $(src)$|KSU_KERNEL_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))|' \
+            "$KERNEL_PLATFORM_FOLDER/KernelSU/kernel/Kbuild"
+          if grep -q 'KSU_KERNEL_DIR := $(patsubst' "$KERNEL_PLATFORM_FOLDER/KernelSU/kernel/Kbuild"; then
+            echo "Anchored KSU_KERNEL_DIR on the Kbuild's own directory (6.12 \$(src) fix)"
+          fi
+        fi
+
         cd "$KERNEL_PLATFORM_FOLDER/KernelSU"
 
         KSU_COMMIT_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
