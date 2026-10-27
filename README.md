@@ -119,9 +119,9 @@ fourth comes up without it. Keep your stock `boot.img` handy either way.
 
 ## Updating and removing
 
-- **Update** — re-flash the kernel ZIP **and** NoMount Suite together (keep them a matched set).
-- **After an OTA** — the system update restores the stock kernel; just re-flash the release.
-- **Remove** — delete NoMount Suite in BakaSU Manager and reboot, then flash a stock boot image (or take an OTA) to drop the custom kernel.
+- **Update**: re-flash the kernel ZIP **and** NoMount Suite together (keep them a matched set).
+- **After an OTA**: the system update restores the stock kernel; just re-flash the release.
+- **Remove**: delete NoMount Suite in BakaSU Manager and reboot, then flash a stock boot image (or take an OTA) to drop the custom kernel.
 
 ---
 
@@ -158,7 +158,7 @@ Root option:
 ## Links
 
 - [BakaSU](https://github.com/BakaSU/BakaSU) · [BakaSU Manager releases](https://github.com/BakaSU/BakaSU/releases)
-- [NoMount Suite](https://github.com/Bouteillepleine/NoMount-Suite) — the hiding add-on
+- [NoMount Suite](https://github.com/Bouteillepleine/NoMount-Suite), the hiding add-on
 - [Kernel Flasher](https://github.com/fatalcoder524/KernelFlasher)
 - [Releases](https://github.com/Bouteillepleine/OnePlus-BakaSu_NMS/releases)
 
