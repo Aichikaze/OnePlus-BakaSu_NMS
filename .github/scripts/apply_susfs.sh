@@ -80,7 +80,7 @@ if grep -q 'my_setprocattr' "$SUSFS_PATCH" && ! grep -rqs 'int my_setprocattr(' 
   fi
 fi
 
-rejects="$(patch -p1 --forward --dry-run < "$SUSFS_PATCH" 2>&1 | awk '/^checking file/{f=$3} /Hunk #[0-9]+ FAILED/{n=$2; gsub("#","",n); print f":"n}')" || true
+rejects="$(patch -p1 -F0 --forward --dry-run < "$SUSFS_PATCH" 2>&1 | awk '/^checking file/{f=$3} /Hunk #[0-9]+ FAILED/{n=$2; gsub("#","",n); print f":"n}')" || true
 if [ -n "$rejects" ]; then
   echo "SUSFS kernel patch rejects on ${ANDROID_VER}-${KERNEL_VER} ($(grep -m1 '^SUBLEVEL' Makefile | tr -d ' ')):"
   printf '%s\n' "$rejects" | sed 's/^/   rejected: /'
@@ -108,7 +108,7 @@ fix_memory_include() {
   return 1
 }
 
-if ! patch -p1 --forward < "$SUSFS_PATCH"; then
+if ! patch -p1 -F0 --forward < "$SUSFS_PATCH"; then
   if [ -f fs/exec.c.rej ] && grep -q 'susfs_def.h' fs/exec.c.rej && [ "$(grep -c '^@@' fs/exec.c.rej)" = 1 ] && fix_exec_include; then
     rm -f fs/exec.c.rej
   fi
