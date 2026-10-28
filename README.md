@@ -106,7 +106,7 @@ configs/
    - the **kernel** ZIP matching your exact device / OS / kernel base, and
    - the **`00_NoMount-Module-vX.Y.Z.zip`** add-on (top of the Assets list).
 2. **Flash the kernel** ZIP with **Kernel Flasher** (or **BakaSU Manager**).
-3. **Install the BakaSU Manager APK.** Use the version shown as `BakaSU Version` in the release notes.
+3. **Install the BakaSU Manager APK** attached to the release: `BakaSU_<build>_normal.apk` or `BakaSU_<build>_spoofed.apk`, one of the two.
 4. **Add NoMount Suite:** BakaSU Manager → **Modules → Install from storage** → select `00_NoMount-Module-…zip`.
    > Already have a metamodule? Remove it and reboot **first**: only one metamodule can be active at a time.
 5. **Reboot.**

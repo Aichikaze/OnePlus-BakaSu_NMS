@@ -460,8 +460,8 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
     outputs:
-      ksun_ver: ${{ steps.build-stat.outputs.ksu_version }}
-      ksu_ver: ${{ steps.build-stat.outputs.ksu_version }}
+      ksun_ver: ${{ steps.build-stat.outputs.ksu_ver }}
+      ksu_ver: ${{ steps.build-stat.outputs.ksu_ver }}
     env:
       OP_TOTAL_DEVICES: ${{ needs.set-op-model.outputs.device_count }}
     steps:
@@ -859,6 +859,22 @@ jobs:
             echo "MOD_MIRRORED=$MOD_MIRRORED"
           } >> "$GITHUB_ENV"
 
+      - name: 📥 Fetch the BakaSU manager APKs
+        shell: bash
+        env:
+          UPSTREAM: Baka-SU/BakaSU
+          OUT_DIR: managers
+        run: |
+          set -euo pipefail
+          DRIVER_VER="$(for z in downloaded-artifacts/AK3_*.zip; do n="$(basename "$z" .zip)"; IFS=_ read -ra p <<< "${n#AK3_}"; echo "${p[4]:-}"; done | sort -u)"
+          if ! [[ "$DRIVER_VER" =~ ^[0-9]+$ ]]; then
+            echo "::warning::the AK3 zips do not agree on one driver build ($(echo $DRIVER_VER | tr '\n' ' ')); not attaching a manager"
+            exit 0
+          fi
+          export DRIVER_VER
+          export BASE_VERSION="$(sed -n 's/^ *BASE_VERSION=\([0-9]*\)$/\1/p' .github/actions/build-kernel/action.yml | head -n1)"
+          bash .github/scripts/fetch_manager.sh
+
       - name: 🔐 Generate Checksums
         shell: bash
         run: |
@@ -873,6 +889,9 @@ jobs:
           cd downloaded-artifacts
           sha256sum *.zip | sort -k2 > ../00_CHECKSUMS.txt
           cd ..
+          if compgen -G "managers/*.apk" > /dev/null; then
+            (cd managers && sha256sum *.apk) >> 00_CHECKSUMS.txt
+          fi
 
           echo "Generated 00_CHECKSUMS.txt:"
           cat 00_CHECKSUMS.txt
@@ -1015,7 +1034,7 @@ jobs:
           | | Download | Where it's from | How to install |
           |---|---|---|---|
           | 1️⃣ **Kernel** | \`AK3_<device>_…zip\` (pick yours below) | built by this repo's CI | Kernel Flasher / BakaSU Manager |
-          | 2️⃣ **BakaSU Manager** | \`BakaSU_<build>_normal.apk\` or \`_spoofed.apk\` | upstream CI, mirrored here | install **one** - see *Manager Applications* |
+          | 2️⃣ **BakaSU Manager** | \`BakaSU_<build>_normal.apk\` or \`_spoofed.apk\` | upstream CI, fetched at release time | install **one** - see *Manager Applications* |
           | 3️⃣ **NoMount Suite** | \`$MOD_ASSET\` | the separate [NoMount project](${{ github.server_url }}/${MOD_REPO}/releases/latest) | BakaSU Manager → Modules → Install from storage |
 
           > The kernel has NoMount **compiled in but dormant** — the **NoMount Suite module activates it**. You need both.
@@ -1212,17 +1231,21 @@ jobs:
           
           ### Official Manager
           EOF
+          if [ -n "${MGR_BUILD:-}" ]; then
+          NPKG=""; [ -z "${MGR_NORMAL_PKG:-}" ] || NPKG=" (\`$MGR_NORMAL_PKG\`)"
+          SPKG=""; [ -z "${MGR_SPOOFED_PKG:-}" ] || SPKG=" (\`$MGR_SPOOFED_PKG\`)"
           cat << EOF >> release_notes.md
-          - **BakaSU Manager** — two APKs are attached to this release, install **one**:
-            - \`BakaSU_<build>_normal.apk\` — the plain package
-            - \`BakaSU_<build>_spoofed.apk\` — same app under a randomised package name, so a
-              scan of installed packages does not find a known root manager
-            Upstream ships both under the SAME filename, so they are renamed here; the package
-            name is the only other way to tell them apart. Both carry the same signing certificate,
-            which is the only thing the kernel checks. The number is the manager build and it
-            matches the \`BAKASU_<build>\` in every AnyKernel3 ZIP name — they are attached only
-            when they match.
-            → [GitHub Release](https://github.com/Baka-SU/BakaSU/releases)
+          - **BakaSU Manager** build **${MGR_BUILD}**, fetched from the upstream [Build Manager run ${MGR_RUN}](https://github.com/Baka-SU/BakaSU/actions/runs/${MGR_RUN}) at commit \`${MGR_SHA:0:8}\`${MGR_NOTE}. Two APKs are attached, install **one**:
+            - \`${MGR_NORMAL}\`: the plain package${NPKG}
+            - \`${MGR_SPOOFED}\`: the same app under a randomised package name${SPKG}, so a scan of installed packages does not find a known root manager
+            Upstream ships both under the same filename, so they are renamed here. Both carry the same signing certificate, which is the only thing the kernel checks. arm64-v8a only.
+          EOF
+          else
+          cat << EOF >> release_notes.md
+          - **BakaSU Manager**: not attached to this release, upstream had no manager build to pair with driver ${ksu_ver_global}. Take the \`Manager-release\` and \`Spoofed-Manager-release\` artifacts of the matching commit from the [upstream Build Manager workflow](https://github.com/Baka-SU/BakaSU/actions/workflows/build-manager.yml).
+          EOF
+          fi
+          cat << EOF >> release_notes.md
           > ⚠️ **Do not let the manager update itself past this kernel.** The version number does not pin the uapi: a manager and a driver can both report the same version and still disagree, which the manager reports as *"Manager uapi version (N) and driver uapi version (M) mismatch"* and root management stops working. Install the APK from **this** release's Assets, and reflash a matching kernel before taking a newer one.
           EOF
           cat << EOF >> release_notes.md
@@ -1270,50 +1293,6 @@ jobs:
           EOF
           echo "--- Final Release Notes ---"
           cat release_notes.md
-
-      - name: 📥 Fetch BakaSU manager APKs
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          KSU_VER: ${{ needs.build.outputs.ksu_ver }}
-        run: |
-          set -euo pipefail
-          # Upstream publishes the per-build manager only as an Actions artifact: those
-          # expire, and another repo's token cannot read them. So the pair is mirrored
-          # into this repo as a `manager-<build>` release and rides along here.
-          MGR_TAG=$(gh release list --repo "${{ github.repository }}" --limit 100 \
-            --json tagName --jq '[.[].tagName | select(startswith("manager-"))] | .[0] // empty')
-          if [ -z "$MGR_TAG" ]; then
-            echo "::warning::No manager-* release in this repo - shipping without the manager APKs."
-            exit 0
-          fi
-          # The manager and the driver must be the same build. A newer kernel with an older
-          # manager is the "Manager uapi version (N) and driver uapi version (M) mismatch"
-          # this release's own notes warn about, so ship nothing rather than a wrong pair.
-          MGR_BUILD="${MGR_TAG#manager-}"
-          # KSU_VER comes from needs.build.outputs.ksu_ver, which is always empty: the job
-          # maps steps.build-stat.outputs.ksu_version while the step writes ksu_ver. The
-          # old guard was `[ -n "$KSU_VER" ] && ...`, so an empty value skipped the check
-          # entirely and a manager 9 builds behind the driver shipped anyway - measured on
-          # a full release. Read the number from the AK3 zips this release actually carries,
-          # and refuse to attach anything when even that cannot be determined.
-          DRIVER_VER="${KSU_VER:-}"
-          if [ -z "$DRIVER_VER" ]; then
-            DRIVER_VER=$(ls ./downloaded-artifacts/AK3_*.zip 2>/dev/null | head -1 \
-              | sed -E 's/.*_([0-9]+)\.zip$/\1/')
-          fi
-          if [ -z "$DRIVER_VER" ]; then
-            echo "::warning::could not determine which driver build this release carries - not attaching any manager APK."
-            exit 0
-          fi
-          if [ "$MGR_BUILD" != "$DRIVER_VER" ]; then
-            echo "::warning::$MGR_TAG does not match the driver this release carries ($DRIVER_VER) - not attaching it. Cut a manager-$DRIVER_VER release."
-            exit 0
-          fi
-          mkdir -p managers
-          gh release download "$MGR_TAG" --repo "${{ github.repository }}" \
-            --pattern '*.apk' --dir managers
-          ls -la managers
 
       - name: 🚀 Create GitHub Release
         run: |
@@ -1373,7 +1352,7 @@ jobs:
           ### 📦 Assets
           EOF
           
-          for zip in ./downloaded-artifacts/*.zip; do
+          for zip in ./downloaded-artifacts/*.zip ./managers/*.apk; do
             if [ -f "$zip" ]; then
               name=$(basename "$zip")
               size=$(stat -c%s "$zip")
