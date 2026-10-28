@@ -7,7 +7,7 @@
   <default remote="clo-la" revision="dummy_revision" sync-c="true" sync-tags="false"/>
   <project remote="Bouteillepleine" name="AnyKernel3" path="AnyKernel3" revision="suite"/>
 
-  <project remote="aosp" name="kernel/common" path="kernel_platform/common" revision="156718920225fb0bce7ad9a95dc4df54c3d9032e" clone-depth="1">
+  <project remote="aosp" name="kernel/common" path="kernel_platform/common" revision="android16-6.12-2026-06_r37" clone-depth="1">
     <linkfile dest="kernel_platform/.source_date_epoch_dir" src="."/>
   </project>
 
