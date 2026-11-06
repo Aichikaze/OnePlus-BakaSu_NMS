@@ -85,6 +85,9 @@ redirection inside the kernel:
   AOSP profile matched to each kernel sublevel.
 - **MLGO register allocation**, ML-guided allocation on the 6.12 Snapdragon targets whose
   toolchain ships the model.
+- **BORE** (Burst-Oriented Response Enhancer), a scheduler that favours low-burst interactive
+  tasks. On by default; `sched_bore` in `/proc/sys/kernel` turns it off at runtime without a
+  reboot.
 - **BBRv3 and ECN** for TCP.
 - **WireGuard**, built into the kernel.
 - **IP sets and IPv6 NAT**, and the netfilter **TTL target**.
