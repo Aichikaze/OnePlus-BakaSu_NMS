@@ -989,6 +989,11 @@ runs:
       shell: bash
       run: python3 -I "$BOUTEILLE_KERNEL_PATCHES_FOLDER/scripts/fix_oplus_task_struct_kabi.py"
 
+    - name: Fix MTK firmware dotdot exception
+      if: ${{ env.KERNEL_VER == '5.10' && (startsWith(env.OP_SOC, 'dimensity') || startsWith(env.OP_SOC, 'helio')) }}
+      shell: bash
+      run: python3 -I "$BOUTEILLE_KERNEL_PATCHES_FOLDER/scripts/fix_mtk_firmware_dotdot.py"
+
     - name: Apply CVE backports
       id: cve
       shell: bash
@@ -3130,7 +3135,7 @@ runs:
         path: ${{ env.ARTIFACTS_FOLDER }}/${{ env.ZIP_NAME }}
         archive: false
         compression-level: 0
-        retention-days: 90
+        retention-days: 7
 
 
     - name: Upload ccache log
