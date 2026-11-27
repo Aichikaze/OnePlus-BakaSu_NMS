@@ -2004,19 +2004,38 @@ runs:
         echo "CVE_SUMMARY=$s" >> "$GITHUB_ENV"
         echo "CVE backports: $s"
 
-    - name: Embed inte overlay module
+    - name: Apply arb_guard
+      shell: bash
+      run: |
+        set -euo pipefail
+        P="$BOUTEILLE_KERNEL_PATCHES_FOLDER/oneplus/arb_guard/arb_guard-${ANDROID_VER}-${KERNEL_VER}.patch"
+        if [ ! -f "$P" ]; then
+          echo "No arb_guard patch for ${ANDROID_VER}-${KERNEL_VER}"
+          exit 0
+        fi
+        cd "$COMMON_KERNEL_FOLDER"
+        patch -p1 --forward -F0 < "$P"
+        if ! grep -q '^	arb_guard(info);$' kernel/module/main.c; then
+          echo "::error::arb_guard hook missing from load_module()"
+          exit 1
+        fi
+        echo "✅ arb_guard: qcom_scm's anti-rollback commit is stubbed at module load"
+
+    - name: Embed module_overlay payloads
       shell: bash
       run: |
         set -euo pipefail
         MODDIR="$BOUTEILLE_KERNEL_PATCHES_FOLDER/oneplus/module_overlay"
-        KO="$MODDIR/modules/inte_${ANDROID_VER}-${KERNEL_VER}.ko"
         PATCHFILE="$MODDIR/0001-module-Add-module-intercept-and-overlay-mechanism-${ANDROID_VER}-${KERNEL_VER}.patch"
-        if [ ! -f "$KO" ]; then
-          echo "No committed inte.ko for ${ANDROID_VER}-${KERNEL_VER}; skipping module_overlay embed."
+        payloads=()
+        KO="$MODDIR/modules/inte_${ANDROID_VER}-${KERNEL_VER}.ko"
+        if [ -f "$KO" ]; then payloads+=("$KO|inte.ko"); else echo "No committed inte.ko for ${ANDROID_VER}-${KERNEL_VER}"; fi
+        if [ ${#payloads[@]} -eq 0 ]; then
+          echo "No module_overlay payloads; skipping."
           exit 0
         fi
         if [ ! -f "$PATCHFILE" ]; then
-          echo "::error::inte.ko present but module_overlay patch missing: $PATCHFILE"
+          echo "::error::module_overlay payloads present but patch missing: $PATCHFILE"
           exit 1
         fi
         missing=()
@@ -2027,10 +2046,14 @@ runs:
         cd "$COMMON_KERNEL_FOLDER"
         echo "Applying module_overlay patch: $(basename "$PATCHFILE")"
         patch -p1 < "$PATCHFILE"
-        mkdir -p "$COMMON_KERNEL_FOLDER/kernel/module/module_overlay/modules"
-        cp "$KO" "$COMMON_KERNEL_FOLDER/kernel/module/module_overlay/modules/inte.ko"
-        echo "INTE_OVERLAY_EMBEDDED=1" >> "$GITHUB_ENV"
-        echo "✅ embedded $(basename "$KO") as kernel/module/module_overlay/modules/inte.ko"
+        # the success path would otherwise name every swapped module in dmesg
+        sed -i 's/pr_info("module_overlay:/pr_debug("module_overlay:/' kernel/module/main.c kernel/module/module_overlay/module_intercept.c
+        mkdir -p kernel/module/module_overlay/modules
+        for p in "${payloads[@]}"; do
+          cp "${p%%|*}" "kernel/module/module_overlay/modules/${p#*|}"
+          echo "✅ embedded $(basename "${p%%|*}") as kernel/module/module_overlay/modules/${p#*|}"
+          if [ "${p#*|}" = inte.ko ]; then echo "INTE_OVERLAY_EMBEDDED=1" >> "$GITHUB_ENV"; fi
+        done
 
     - name: 🧠 Apply BORE scheduler
       shell: bash
@@ -2354,6 +2377,9 @@ runs:
         set +u
         source "$KERNEL_PLATFORM_FOLDER/build/kernel/_setup_env.sh" 2>/dev/null || true
         set -u
+        # Kleaf's _setup_env.sh exports this, but MTK modules repos ship none: without it
+        # gendwarfksyms hashes ANDROID_KABI_RESERVE slots literally and ~2/3 of KMI CRCs drift.
+        export KBUILD_GENDWARFKSYMS_STABLE=1
         
         echo '#!/bin/bash' > "$COMMON_KERNEL_FOLDER/ld-wrapper"
         echo 'ld.lld "$@" --thinlto-jobs=$(nproc --all) ${NMS_LD_MLLVM:-}' >> "$COMMON_KERNEL_FOLDER/ld-wrapper"
